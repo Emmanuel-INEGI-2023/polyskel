@@ -12,7 +12,9 @@ from collections import namedtuple
 
 log = logging.getLogger("__name__")
 
-EPSILON = 0.00001
+EPSILON = 0.0000001
+APROX = 0.00002
+
 
 class Debug:
 	def __init__(self, image):
@@ -57,7 +59,7 @@ def _cross(a, b):
 
 
 def _approximately_equals(a, b):
-	return a == b or (abs(a - b) <= max(abs(a), abs(b)) * 0.001)
+	return a == b or (abs(a - b) <= max(abs(a), abs(b)) * APROX)
 
 
 def _approximately_same(point_a, point_b):
@@ -102,7 +104,7 @@ class _LAVertex:
 		self.prev = None
 		self.next = None
 		self.lav = None
-		self._valid = True  # TODO this might be handled better. Maybe membership in lav implies validity?
+		self._valid = True  # TODO this might be handled better. Maybe membership in lav implies validity?   
 
 		creator_vectors = (edge_left.v.normalized() * -1, edge_right.v.normalized())
 		if direction_vectors is None:
@@ -111,7 +113,8 @@ class _LAVertex:
 		self._is_reflex = (_cross(*direction_vectors)) < 0
 		self._bisector = Ray2(self.point, operator.add(*creator_vectors) * (-1 if self.is_reflex else 1))
 		log.info("Created vertex %s", self.__repr__())
-		_debug.line((self.bisector.p.x, self.bisector.p.y, self.bisector.p.x + self.bisector.v.x * 100, self.bisector.p.y + self.bisector.v.y * 100), fill="blue")
+		##print("Created vertex %s", self.__repr__())
+		_debug.line((self.bisector.p.x, self.bisector.p.y, self.bisector.p.x + self.bisector.v.x * 1, self.bisector.p.y + self.bisector.v.y * 1), fill="blue")
 
 	@property
 	def bisector(self):
@@ -136,13 +139,12 @@ class _LAVertex:
 					continue
 
 				log.debug("\tconsidering EDGE %s", edge)
-
 				# a potential b is at the intersection of between our own bisector and the bisector of the
 				# angle between the tested edge and any one of our own edges.
 
 				# we choose the "less parallel" edge (in order to exclude a potentially parallel edge)
-				leftdot = abs(self.edge_left.v.normalized().dot(edge.edge.v.normalized()))
-				rightdot = abs(self.edge_right.v.normalized().dot(edge.edge.v.normalized()))
+				leftdot = self.edge_left.v.normalized().dot(edge.edge.v.normalized())
+				rightdot = self.edge_right.v.normalized().dot(edge.edge.v.normalized())
 				selfedge = self.edge_left if leftdot < rightdot else self.edge_right
 				otheredge = self.edge_left if leftdot > rightdot else self.edge_right
 
@@ -203,10 +205,10 @@ class _LAVertex:
 		return self._valid
 
 	def __str__(self):
-		return "Vertex ({:.2f};{:.2f})".format(self.point.x, self.point.y)
+		return "Vertex ({:.9f};{:.9f})".format(self.point.x, self.point.y)
 
 	def __repr__(self):
-		return "Vertex ({}) ({:.2f};{:.2f}), bisector {}, edges {} {}".format("reflex" if self.is_reflex else "convex",
+		return "Vertex ({}) ({:.9f};{:.9f}), bisector {}, edges {} {}".format("reflex" if self.is_reflex else "convex",
 																			  self.point.x, self.point.y, self.bisector,
 																			  self.edge_left, self.edge_right)
 
@@ -240,14 +242,14 @@ class _SLAV:
 
 		lav = event.vertex_a.lav
 		if event.vertex_a.prev == event.vertex_b.next:
-			log.info("%.2f Peak event at intersection %s from <%s,%s,%s> in %s", event.distance,
+			log.info("%.15f Peak event at intersection %s from <%s,%s,%s> in %s", event.distance,
 					 event.intersection_point, event.vertex_a, event.vertex_b, event.vertex_a.prev, lav)
 			self._lavs.remove(lav)
 			for vertex in list(lav):
 				sinks.append(vertex.point)
 				vertex.invalidate()
 		else:
-			log.info("%.2f Edge event at intersection %s from <%s,%s> in %s", event.distance, event.intersection_point,
+			log.info("%.15f Edge event at intersection %s from <%s,%s> in %s", event.distance, event.intersection_point,
 					 event.vertex_a, event.vertex_b, lav)
 			new_vertex = lav.unify(event.vertex_a, event.vertex_b, event.intersection_point)
 			if lav.head in (event.vertex_a, event.vertex_b):
@@ -261,7 +263,7 @@ class _SLAV:
 
 	def handle_split_event(self, event):
 		lav = event.vertex.lav
-		log.info("%.2f Split event at intersection %s from vertex %s, for edge %s in %s", event.distance,
+		log.info("%.9f Split event at intersection %s from vertex %s, for edge %s in %s", event.distance,
 				 event.intersection_point, event.vertex, event.opposite_edge, lav)
 
 		sinks = [event.vertex.point]
@@ -481,6 +483,8 @@ def skeletonize(polygon, holes=None):
 	Returns the straight skeleton as a list of "subtrees", which are in the form of (source, height, sinks),
 	where source is the highest points, height is its height, and sinks are the point connected to the source.
 	"""
+
+
 	slav = _SLAV(polygon, holes)
 	output = []
 	prioque = _EventQueue()
@@ -494,13 +498,13 @@ def skeletonize(polygon, holes=None):
 		i = prioque.get()
 		if isinstance(i, _EdgeEvent):
 			if not i.vertex_a.is_valid or not i.vertex_b.is_valid:
-				log.info("%.2f Discarded outdated edge event %s", i.distance, i)
+				log.info("%.9f Discarded outdated edge event %s", i.distance, i)
 				continue
 
 			(arc, events) = slav.handle_edge_event(i)
 		elif isinstance(i, _SplitEvent):
 			if not i.vertex.is_valid:
-				log.info("%.2f Discarded outdated split event %s", i.distance, i)
+				log.info("%.9f Discarded outdated split event %s", i.distance, i)
 				continue
 			(arc, events) = slav.handle_split_event(i)
 
